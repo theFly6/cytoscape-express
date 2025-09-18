@@ -8,13 +8,13 @@ export const getRandomUtilization = (min: number, max: number): number => {
 export const mockNodeData = (nodeID: string) => {
   // 根据节点ID生成不同配置，使数据更真实
   const isGpuNode = nodeID.includes('gpu')
-  
+
   return {
     nodeID,
     memory: {
       total: isGpuNode ? '32GB' : '16GB',
-      used: isGpuNode ? 
-        `${(Math.random() * 10 + 5).toFixed(2)}GB` : 
+      used: isGpuNode ?
+        `${(Math.random() * 10 + 5).toFixed(2)}GB` :
         `${(Math.random() * 5 + 2).toFixed(2)}GB`,
       utilization: getRandomUtilization(30, 80) // 30%-80% 利用率
     },
@@ -47,14 +47,14 @@ export const mockLinkData = (nodeID: string) => {
   // 为每个节点生成2-4个连接的其他节点
   const linkCount = 2 + Math.floor(Math.random() * 3)
   const links = []
-  
+
   for (let i = 0; i < linkCount; i++) {
     // 生成一个与当前nodeID不同的目标节点ID
     let targetNodeID: string
     do {
       targetNodeID = `node-${Math.floor(Math.random() * 100).toString().padStart(3, '0')}`
     } while (targetNodeID === nodeID)
-    
+
     links.push({
       from: nodeID,
       to: targetNodeID,
@@ -64,6 +64,44 @@ export const mockLinkData = (nodeID: string) => {
       utilization: getRandomUtilization(10, 60) // 10%-60% 利用率
     })
   }
-  
+
   return links
+}
+
+const getRandomColor = () => {
+  // 生成随机颜色
+  const r = Math.floor(Math.random() * 256);
+  const g = Math.floor(Math.random() * 256);
+  const b = Math.floor(Math.random() * 256);
+  return `${r} ${g} ${b}`;
+}
+const clusters = {
+  'cp-001-gpu': getRandomColor(),
+  'cp-002-gpu': getRandomColor(),
+  'cp-001-cpu': getRandomColor(),
+  'cp-002-cpu': getRandomColor(),
+  'cp-001-numa': getRandomColor(),
+  'cp-002-numa': getRandomColor(),
+  'cp-001-nvlink':  getRandomColor(),
+  'cp-002-nvlink':  getRandomColor(),
+}
+
+// 拓扑聚类
+export const topologyCluster: Record<string, any> = {
+  'sw-001': '238 238 238',
+  'lg-001': '238 238 238',
+  'cp-001': '238 238 238',
+  'cp-002': '238 238 238',
+  'default': (id: string) => {
+    // 根据ID前缀分配颜色
+    if (id.startsWith('cp-001-gpu')) return clusters['cp-001-gpu'];
+    if (id.startsWith('cp-002-gpu')) return clusters['cp-002-gpu'];
+    if (id.startsWith('cp-001-cpu')) return clusters['cp-001-cpu'];
+    if (id.startsWith('cp-002-cpu')) return clusters['cp-002-cpu'];
+    if (id.startsWith('cp-001-numa')) return clusters['cp-001-numa'];
+    if (id.startsWith('cp-002-numa')) return clusters['cp-002-numa'];
+    if (id.startsWith('cp-001-nvlink')) return clusters['cp-001-nvlink'];
+    if (id.startsWith('cp-002-nvlink')) return clusters['cp-002-nvlink'];
+    return getRandomColor(); // 随机颜色
+  }
 }
