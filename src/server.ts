@@ -1,5 +1,10 @@
 // src/index.ts
 
+// 注入.env系统文件变量
+import dotenv from 'dotenv'
+
+dotenv.config()
+
 import app from './app'
 
 const PORT = process.env.PORT || 3000

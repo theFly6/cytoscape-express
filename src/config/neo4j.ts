@@ -1,9 +1,13 @@
 import neo4j from 'neo4j-driver';
 
-export const Neo4jDatabase = "test";
+export const Neo4jDatabase = "test2";
 const driver = neo4j.driver(
-  'bolt://localhost:7687', // 修改为你的 Neo4j 地址
-  neo4j.auth.basic('neo4j', 'cytoscape') // 修改为你的用户名和密码
+  'bolt://localhost:7687',
+  neo4j.auth.basic('neo4j', 'cytoscape')
 );
 
 export default driver;
+
+
+// 在线预览
+// http://localhost:7474/browser/preview/

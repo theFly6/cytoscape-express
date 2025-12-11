@@ -1,0 +1,10 @@
+{
+  "X": "Self",
+  "SYS": "Topology path that contains PCIe switches/bridges as well as multiple host bridges across NUMA nodes.",
+  "NODE": "Topology path that contains PCIe switches/bridges as well as multiple host bridges within a NUMA node.",
+  "HPB": "Topology path that contains PCIe switches/bridges as well as a single host bridge.",
+  "MPB": "Topology path that contains multiple PCIe switches/bridges (but no host bridge).",
+  "SPB": "Topology path that contains at most one PCIe switch/bridge.",
+  "INT": "Topology path that is created internally, for example 2 devices on a single S2000 card.",
+  "MTx": "Topology path that is a bonded set of x MTLinks."
+}

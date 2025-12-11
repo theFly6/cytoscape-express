@@ -1,0 +1,54 @@
+{
+    "node": {
+        "nodeName": "g3025",
+        "nodeType": "NVIDIA",
+        "components": [
+            {
+                "componentName": "GPU0",
+                "componentType": "GPU",
+                "componentId": "g3025-gpu0"
+            },
+            {
+                "componentName": "GPU1",
+                "componentType": "GPU",
+                "componentId": "g3025-gpu1"
+            },
+            {
+                "componentName": "GPU2",
+                "componentType": "GPU",
+                "componentId": "g3025-gpu2"
+            },
+            {
+                "componentName": "GPU3",
+                "componentType": "GPU",
+                "componentId": "g3025-gpu3"
+            },
+            {
+                "componentName": "GPU4",
+                "componentType": "GPU",
+                "componentId": "g3025-gpu4"
+            },
+            {
+                "componentName": "GPU5",
+                "componentType": "GPU",
+                "componentId": "g3025-gpu5"
+            },
+            {
+                "componentName": "GPU6",
+                "componentType": "GPU",
+                "componentId": "g3025-gpu6"
+            },
+            {
+                "componentName": "GPU7",
+                "componentType": "GPU",
+                "componentId": "g3025-gpu7"
+            }
+        ],
+        "edgesLinks": [
+            {
+                "from": "GPU0",
+                "to": "NV12" 
+            }
+        ]
+    }
+}

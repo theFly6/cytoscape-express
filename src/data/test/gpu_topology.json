@@ -1,0 +1,252 @@
+[
+  {
+    "device": "GPU0",
+    "connections": {
+      "GPU0": "X",
+      "GPU1": "MPB",
+      "GPU2": "MPB",
+      "GPU3": "MPB",
+      "GPU4": "NODE",
+      "GPU5": "NODE",
+      "GPU6": "NODE",
+      "GPU7": "NODE",
+      "mlx5_1": "NODE",
+      "mlx5_2": "NODE",
+      "mlx5_3": "NODE",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    },
+    "cpu_affinity": "0-31,64-95",
+    "numa_affinity": "0"
+  },
+  {
+    "device": "GPU1",
+    "connections": {
+      "GPU0": "MPB",
+      "GPU1": "X",
+      "GPU2": "MPB",
+      "GPU3": "MPB",
+      "GPU4": "NODE",
+      "GPU5": "NODE",
+      "GPU6": "NODE",
+      "GPU7": "NODE",
+      "mlx5_1": "NODE",
+      "mlx5_2": "NODE",
+      "mlx5_3": "NODE",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    },
+    "cpu_affinity": "0-31,64-95",
+    "numa_affinity": "0"
+  },
+  {
+    "device": "GPU2",
+    "connections": {
+      "GPU0": "MPB",
+      "GPU1": "MPB",
+      "GPU2": "X",
+      "GPU3": "MPB",
+      "GPU4": "NODE",
+      "GPU5": "NODE",
+      "GPU6": "NODE",
+      "GPU7": "NODE",
+      "mlx5_1": "NODE",
+      "mlx5_2": "NODE",
+      "mlx5_3": "NODE",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    },
+    "cpu_affinity": "0-31,64-95",
+    "numa_affinity": "0"
+  },
+  {
+    "device": "GPU3",
+    "connections": {
+      "GPU0": "MPB",
+      "GPU1": "MPB",
+      "GPU2": "MPB",
+      "GPU3": "X",
+      "GPU4": "NODE",
+      "GPU5": "NODE",
+      "GPU6": "NODE",
+      "GPU7": "NODE",
+      "mlx5_1": "NODE",
+      "mlx5_2": "NODE",
+      "mlx5_3": "NODE",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    },
+    "cpu_affinity": "0-31,64-95",
+    "numa_affinity": "0"
+  },
+  {
+    "device": "GPU4",
+    "connections": {
+      "GPU0": "NODE",
+      "GPU1": "NODE",
+      "GPU2": "NODE",
+      "GPU3": "NODE",
+      "GPU4": "X",
+      "GPU5": "MPB",
+      "GPU6": "MPB",
+      "GPU7": "MPB",
+      "mlx5_1": "MPB",
+      "mlx5_2": "NODE",
+      "mlx5_3": "NODE",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    },
+    "cpu_affinity": "0-31,64-95",
+    "numa_affinity": "0"
+  },
+  {
+    "device": "GPU5",
+    "connections": {
+      "GPU0": "NODE",
+      "GPU1": "NODE",
+      "GPU2": "NODE",
+      "GPU3": "NODE",
+      "GPU4": "MPB",
+      "GPU5": "X",
+      "GPU6": "MPB",
+      "GPU7": "MPB",
+      "mlx5_1": "MPB",
+      "mlx5_2": "NODE",
+      "mlx5_3": "NODE",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    },
+    "cpu_affinity": "0-31,64-95",
+    "numa_affinity": "0"
+  },
+  {
+    "device": "GPU6",
+    "connections": {
+      "GPU0": "NODE",
+      "GPU1": "NODE",
+      "GPU2": "NODE",
+      "GPU3": "NODE",
+      "GPU4": "MPB",
+      "GPU5": "MPB",
+      "GPU6": "X",
+      "GPU7": "MPB",
+      "mlx5_1": "MPB",
+      "mlx5_2": "NODE",
+      "mlx5_3": "NODE",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    },
+    "cpu_affinity": "0-31,64-95",
+    "numa_affinity": "0"
+  },
+  {
+    "device": "GPU7",
+    "connections": {
+      "GPU0": "NODE",
+      "GPU1": "NODE",
+      "GPU2": "NODE",
+      "GPU3": "NODE",
+      "GPU4": "MPB",
+      "GPU5": "MPB",
+      "GPU6": "MPB",
+      "GPU7": "X",
+      "mlx5_1": "MPB",
+      "mlx5_2": "NODE",
+      "mlx5_3": "NODE",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    },
+    "cpu_affinity": "0-31,64-95",
+    "numa_affinity": "0"
+  },
+  {
+    "device": "mlx5_1",
+    "connections": {
+      "GPU0": "NODE",
+      "GPU1": "NODE",
+      "GPU2": "NODE",
+      "GPU3": "NODE",
+      "GPU4": "MPB",
+      "GPU5": "MPB",
+      "GPU6": "MPB",
+      "GPU7": "MPB",
+      "mlx5_1": "X",
+      "mlx5_2": "NODE",
+      "mlx5_3": "NODE",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    }
+  },
+  {
+    "device": "mlx5_2",
+    "connections": {
+      "GPU0": "NODE",
+      "GPU1": "NODE",
+      "GPU2": "NODE",
+      "GPU3": "NODE",
+      "GPU4": "NODE",
+      "GPU5": "NODE",
+      "GPU6": "NODE",
+      "GPU7": "NODE",
+      "mlx5_1": "NODE",
+      "mlx5_2": "X",
+      "mlx5_3": "SPB",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    }
+  },
+  {
+    "device": "mlx5_3",
+    "connections": {
+      "GPU0": "NODE",
+      "GPU1": "NODE",
+      "GPU2": "NODE",
+      "GPU3": "NODE",
+      "GPU4": "NODE",
+      "GPU5": "NODE",
+      "GPU6": "NODE",
+      "GPU7": "NODE",
+      "mlx5_1": "NODE",
+      "mlx5_2": "SPB",
+      "mlx5_3": "X",
+      "mlx5_4": "SYS",
+      "mlx5_5": "SYS"
+    }
+  },
+  {
+    "device": "mlx5_4",
+    "connections": {
+      "GPU0": "SYS",
+      "GPU1": "SYS",
+      "GPU2": "SYS",
+      "GPU3": "SYS",
+      "GPU4": "SYS",
+      "GPU5": "SYS",
+      "GPU6": "SYS",
+      "GPU7": "SYS",
+      "mlx5_1": "SYS",
+      "mlx5_2": "SYS",
+      "mlx5_3": "SYS",
+      "mlx5_4": "X",
+      "mlx5_5": "SPB"
+    }
+  },
+  {
+    "device": "mlx5_5",
+    "connections": {
+      "GPU0": "SYS",
+      "GPU1": "SYS",
+      "GPU2": "SYS",
+      "GPU3": "SYS",
+      "GPU4": "SYS",
+      "GPU5": "SYS",
+      "GPU6": "SYS",
+      "GPU7": "SYS",
+      "mlx5_1": "SYS",
+      "mlx5_2": "SYS",
+      "mlx5_3": "SYS",
+      "mlx5_4": "SPB",
+      "mlx5_5": "X"
+    }
+  }
+]
