@@ -66,6 +66,33 @@ export const getTopologyGraph = async (req: Request, res: Response) => {
   }
 };
 
+// 1. 定义【关键词（小写）→ 形状】映射表（支持模糊匹配id中的关键词）
+const shapeMap = {
+  cpu: 'rectangle',        // 匹配id含CPU/cpu/Cpu等的节点     矩形
+  pcie: 'diamond',         // 匹配id含PCIe/pcie/PCIE等的节点  菱形
+  nic: 'triangle',         // 匹配id含NIC/nic/Nic等的节点     三角形
+  gpu: 'star',           // 匹配id含GPU/gpu/Gpu等的节点     星形
+  qpi: 'ellipse',         // 匹配id含QPI/qpi/Qpi等的节点     
+  default: 'ellipse'       // 无匹配时默认椭圆
+};
+
+// 2. 核心工具函数：对节点ID做大小写不敏感的模糊匹配，返回对应形状
+const getNodeShapeById = (nodeId: string) => {
+  // 将ID转为小写，消除大小写影响
+  const lowerId = nodeId.toLowerCase();
+  // 遍历形状映射的关键词，匹配到则返回对应形状
+  for (const [keyword, shape] of Object.entries(shapeMap)) {
+    // 跳过default关键词（兜底用）
+    if (keyword === 'default') continue;
+    // 模糊匹配：id小写后包含关键词小写
+    if (lowerId.includes(keyword)) {
+      return shape;
+    }
+  }
+  // 无匹配时返回默认形状
+  return shapeMap.default;
+};
+
 // 获取 cytoscape 支持的拓扑图数据格式（不计算 depth 和 parent）
 export const getCytoscapeTopology = async (req: Request, res: Response) => {
   const session = driver.session({ database: Neo4jDatabase });
@@ -82,11 +109,12 @@ export const getCytoscapeTopology = async (req: Request, res: Response) => {
       const n = record.get('n');
       const m = record.get('m');
       const r = record.get('r');
-
+      // console.log('r', r.type);
       if(n.properties.id.startsWith(ip) && m.properties.id.startsWith(ip)){
           // 处理节点 n 和 m
         [n, m].forEach(node => {
           const id = node.properties.id;
+          const nShape = getNodeShapeById(id);
           if (!nodeMap.has(id)) {
             const data: any = {
               id,
@@ -99,7 +127,7 @@ export const getCytoscapeTopology = async (req: Request, res: Response) => {
               color: topologyCluster[id] || topologyCluster['default'](id), // 使用聚类颜色
               borderColor: '34 101 151',
               textColor: '17 17 17',
-              shape: 'Ellipse',
+              shape: nShape,
               text: '',
               textFont: '1|Arial|8|0|WINDOWS|1|-11|0|0|0|0|0|0|0|1|0|0|0|0|Arial'
             };
@@ -117,7 +145,7 @@ export const getCytoscapeTopology = async (req: Request, res: Response) => {
         });
 
         // 如果n.properties.depth=1，则不添加边
-        if (n.properties.depth != 1) {
+        if (n.properties.depth != 1 && r.type === 'CONNECTED_TO') {
           // 添加边
           edgeList.push({
             group: 'edges',

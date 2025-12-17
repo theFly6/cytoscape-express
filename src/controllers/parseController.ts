@@ -31,185 +31,482 @@ export const parseNode = async (req: Request, res: Response) => {
     }
 }
 
-// 将拓扑感知结果存储到neo4j中
+// 将拓扑感知结果存储到neo4j中(第一版仅支持学校的感知)
+// export const saveNodeTopologyData = async (ip: string, hostname: string, data: any) => {
+//     console.log('即将准备saveNodeTopologyData', 'ip: ', ip, 'hostname: ', hostname);
+
+//     if (!driver) throw new Error("Neo4j driver not initialized.");
+
+//     const session = driver.session({ database: Neo4jDatabase });
+
+//     try {
+//         const matrixData = data.matrixData;
+//         const computeNodeId = ip;
+
+//         const firstGPU = matrixData.find((d: any) => d.device?.startsWith("GPU"));
+//         const cpuAffinityRanges = firstGPU?.cpu_affinity?.split(",") || ['0-31', '64-95'];
+//         const inferredNumaNodes = ['0', '1'];
+
+//         const cmds: string[] = [];
+
+//         // ================================================================================
+//         // 1. Compute node MERGE
+//         // ================================================================================
+//         cmds.push(`
+//             MERGE (c:Compute {id:'${computeNodeId}'})
+//             ON CREATE SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.createdAt=datetime()
+//             ON MATCH SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.createdAt=datetime()
+//         `);
+
+//         // ================================================================================
+//         // 2. NUMA + CPU
+//         // ================================================================================
+//         for (let i = 0; i < inferredNumaNodes.length; i++) {
+//             const numaId = `${computeNodeId}-numa${i}`;
+//             const cpuId = `${computeNodeId}-cpu${i}`;
+//             const affinity = cpuAffinityRanges[i] || '';
+
+//             // NUMA
+//             cmds.push(`
+//                 MERGE (n:NUMA {id:'${numaId}'})
+//                 ON CREATE SET n.name='NUMA${i}', n.parent='${computeNodeId}', n.depth=2
+//                 ON MATCH SET n.updatedAt=datetime()
+//             `);
+
+//             // CPU
+//             cmds.push(`
+//                 MERGE (cpu:CPU {id:'${cpuId}'})
+//                 ON CREATE SET cpu.name='CPU${i}', cpu.parent='${numaId}', cpu.depth=3,
+//                     cpu.affinity_range='${affinity}', cpu.numa_affinity='${i}'
+//                 ON MATCH SET cpu.updatedAt=datetime()
+//             `);
+
+//             // Relationship
+//             cmds.push(`
+//                 MATCH (c:Compute {id:'${computeNodeId}'}), (n:NUMA {id:'${numaId}'})
+//                 MERGE (c)-[:HAS]->(n)
+//             `);
+//         }
+
+//         // ================================================================================
+//         // 3. QPI Bus
+//         // ================================================================================
+//         const qpiId = `${computeNodeId}-qpi`;
+//         cmds.push(`
+//             MERGE (b:Bus {id:'${qpiId}'})
+//             ON CREATE SET b.name='QPI', b.type='QPI', b.parent='${computeNodeId}', b.depth=2
+//             ON MATCH SET b.updatedAt=datetime()
+//         `);
+
+//         // ================================================================================
+//         // 4. PCIe Switches
+//         // ================================================================================
+//         const pcisw0Id = `${computeNodeId}-pcie0`;
+//         const pcisw1Id = `${computeNodeId}-pcie1`;
+//         const numa0Id = `${computeNodeId}-numa0`;
+
+//         cmds.push(`
+//             MERGE (s:PCIeSwitch {id:'${pcisw0Id}'})
+//             ON CREATE SET s.name='PCISW0', s.type='MPB', s.parent='${numa0Id}', s.depth=3
+//             ON MATCH SET s.updatedAt=datetime()
+//         `);
+
+//         cmds.push(`
+//             MERGE (s:PCIeSwitch {id:'${pcisw1Id}'})
+//             ON CREATE SET s.name='PCISW1', s.type='MPB', s.parent='${numa0Id}', s.depth=3
+//             ON MATCH SET s.updatedAt=datetime()
+//         `);
+
+//         // ================================================================================
+//         // 5. NICs
+//         // ================================================================================
+//         const nicMap = {
+//             "mlx5_2": "numa0",
+//             "mlx5_3": "numa0",
+//             "mlx5_4": "numa1",
+//             "mlx5_5": "numa1"
+//         };
+
+//         for (const [name, numa] of Object.entries(nicMap)) {
+//             const nicId = `${computeNodeId}-${name}`;
+//             const parent = `${computeNodeId}-${numa}`;
+
+//             cmds.push(`
+//                 MERGE (n:NIC {id:'${nicId}'})
+//                 ON CREATE SET n.name='${name.toUpperCase()}', n.parent='${parent}', n.depth=3
+//                 ON MATCH SET n.updatedAt=datetime()
+//             `);
+//         }
+
+//         // ================================================================================
+//         // 6. GPUs
+//         // ================================================================================
+//         for (let i = 0; i < 8; i++) {
+//             cmds.push(`
+//                 MERGE (g:GPU {id:'${computeNodeId}-gpu${i}'})
+//                 ON CREATE SET g.name='GPU${i}', g.parent='${numa0Id}', g.depth=3
+//                 ON MATCH SET g.updatedAt=datetime()
+//             `);
+//         }
+
+//         // ================================================================================
+//         // 7. CONNECTED_TO relationships
+//         // ================================================================================
+//         // 辅助函数：根据组件名称获取完整的 ID
+//         const getComponentId = (name: string): string => {
+//             // 假设：
+//             // - CPU0/CPU1 对应 numa0/numa1
+//             // - PCISW0/PCISW1
+//             // - MLX5_X
+//             // - QPI
+//             // - GPUX
+            
+//             if (name.startsWith("CPU")) {
+//                 const index = name.slice(3); // '0' 或 '1'
+//                 return `${computeNodeId}-cpu${index}`;
+//             }
+//             if (name.startsWith("PCISW")) {
+//                 const index = name.slice(5); // '0' 或 '1'
+//                 return `${computeNodeId}-pcie${index}`;
+//             }
+//             if (name.startsWith("MLX5_")) {
+//                 const index = name.slice(5); // '2' 到 '5'
+//                 return `${computeNodeId}-mlx5_${index}`;
+//             }
+//             if (name === "QPI") {
+//                 return `${computeNodeId}-qpi`;
+//             }
+//             if (name.startsWith("GPU")) {
+//                 const index = name.slice(3); // '0' 到 '7'
+//                 return `${computeNodeId}-gpu${index}`;
+//             }
+//             // 如果有其他类型的节点，需要在这里补充
+//             return ''; // 返回空字符串或抛出错误
+//         };
+
+//         const relationNames = [
+//             ["CPU0","PCISW0"],["CPU0","PCISW1"],
+//             ["CPU0","MLX5_2"],["CPU0","MLX5_3"],
+//             ["CPU0","QPI"],["QPI","CPU1"],
+//             ["CPU1","MLX5_4"],["CPU1","MLX5_5"],
+//             ["MLX5_2","MLX5_3"],
+//             ["MLX5_4","MLX5_5"], 
+//             ["GPU0","PCISW0"],["GPU1","PCISW0"],["GPU2","PCISW0"],["GPU3","PCISW0"],
+//             ["GPU4","PCISW1"],["GPU5","PCISW1"],["GPU6","PCISW1"],["GPU7","PCISW1"]
+//         ];
+
+//         const relationPairs = relationNames.map(([aName, bName]) => [
+//             getComponentId(aName), 
+//             getComponentId(bName)
+//         ]).filter(([idA, idB]) => idA && idB); // 过滤掉无效的 ID
+
+//         for (const [aId, bId] of relationPairs) {
+//             cmds.push(`
+//                 MATCH (x {id:'${aId}'}), (y {id:'${bId}'})
+//                 MERGE (x)-[:CONNECTED_TO]->(y)
+//             `);
+//         }
+
+//         // ================================================================================
+//         // 8. Execute (Neo4j 5.x: one statement per run)
+//         // ================================================================================
+//         await session.writeTransaction(async tx => {
+//             for (const stmt of cmds) {
+//                 await tx.run(stmt);
+//             }
+//         });
+
+//         console.log(`拓扑写入完成: ${hostname} (${ip})`);
+
+//     } finally {
+//         await session.close();
+//     }
+// };
+
+// 假设 driver 和 Neo4jDatabase 已经定义
+
+/**
+ * 将拓扑感知结果存储到Neo4j中（基于物理层级结构）
+ * @param {string} ip - 计算节点的IP
+ * @param {string} hostname - 计算节点的主机名
+ * @param {object} data - 拓扑数据，包含 matrixData
+ */
 export const saveNodeTopologyData = async (ip: string, hostname: string, data: any) => {
-    console.log('即将准备saveNodeTopologyData', 'ip: ', ip, 'hostname: ', hostname);
+    console.log('即将准备saveNodeTopologyData (基于物理结构 - NIC连接到PCISW)', 'ip: ', ip, 'hostname: ', hostname);
 
     if (!driver) throw new Error("Neo4j driver not initialized.");
 
     const session = driver.session({ database: Neo4jDatabase });
 
     try {
-        const matrixData = data.matrixData;
+        const matrixData = data.matrixData || [];
         const computeNodeId = ip;
-
-        const firstGPU = matrixData.find((d: any) => d.device?.startsWith("GPU"));
-        const cpuAffinityRanges = firstGPU?.cpu_affinity?.split(",") || ['0-31', '64-95'];
-        const inferredNumaNodes = ['0', '1'];
-
         const cmds: string[] = [];
+        
+        // --------------------------------------------------------------------------------
+        // 0. 动态识别 NUMA/CPU 组 并 推断 NIC 归属
+        // --------------------------------------------------------------------------------
+        const numaMap = new Map<string, number>(); // {numa_affinity_key: canonical_index}
+        const numaInfoMap = new Map<number, { affinity: string, numaKey: string }>(); // {index: {affinity, numaKey}}
+        // 存储所有设备的 NUMA Key，用于 NIC 推断
+        const deviceNumaMap = new Map<string, string>(); // {deviceName: numaKey}
+        
+        // 第一次遍历：识别所有 GPU 定义的 NUMA 组，并存储 GPU 的归属
+        matrixData.forEach((d: any) => {
+            const numaKey = (d.numa_affinity || 'unknown').toString();
+            // 仅处理具有有效 numa_affinity 的设备
+            if (numaKey !== 'SYS' && numaKey !== 'unknown' && numaKey.trim() !== '') {
+                if (!numaMap.has(numaKey)) {
+                    const index = numaMap.size;
+                    numaMap.set(numaKey, index);
+                    numaInfoMap.set(index, { 
+                        affinity: d.cpu_affinity || '', 
+                        numaKey: numaKey 
+                    });
+                }
+            }
+            // 存储所有设备的归属（如果有 numa_affinity）
+            if (numaKey !== 'SYS' && numaKey !== 'unknown' && numaKey.trim() !== '') {
+                 deviceNumaMap.set(d.device, numaKey);
+            }
+        });
 
-        // ================================================================================
+        // 第二次遍历：为缺少 numa_affinity 的 NIC 推断 NUMA 归属
+        matrixData.forEach((d: any) => {
+            if ((d.device.startsWith("NIC") || d.device.startsWith("mlx5")) && !d.numa_affinity) {
+                const connections = d.connections || {};
+                // 寻找连接类型为 MPB (Multiple PCIe Bridges) 的 GPU
+                for (const [connectedDevice, connectionType] of Object.entries(connections)) {
+                    if (connectedDevice.startsWith("GPU") && connectionType === 'MPB') {
+                        const inferredNumaKey = deviceNumaMap.get(connectedDevice);
+                        if (inferredNumaKey) {
+                            // 推断成功，将 NIC 归属到该 NUMA
+                            deviceNumaMap.set(d.device, inferredNumaKey);
+                            break; 
+                        }
+                    }
+                }
+            }
+        });
+        
+        const numNuma = numaMap.size;
+        const canonicalNumaIds: string[] = [];
+        const canonicalCpuIds: string[] = [];
+        const canonicalPciswIds: string[] = [];
+        const mt2BusId = `${computeNodeId}-mt2-bus`; // 新增 MT2 总线 ID
+
+        // 辅助函数：根据设备名称获取规范的 ID
+        const getCanonicalDeviceId = (name: string): string => `${computeNodeId}-${name.toLowerCase()}`;
+
+        // --------------------------------------------------------------------------------
         // 1. Compute node MERGE
-        // ================================================================================
+        // --------------------------------------------------------------------------------
         cmds.push(`
             MERGE (c:Compute {id:'${computeNodeId}'})
             ON CREATE SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.createdAt=datetime()
-            ON MATCH SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.createdAt=datetime()
+            ON MATCH SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.updatedAt=datetime()
         `);
-
-        // ================================================================================
-        // 2. NUMA + CPU
-        // ================================================================================
-        for (let i = 0; i < inferredNumaNodes.length; i++) {
+        
+        // --------------------------------------------------------------------------------
+        // 2. 动态创建 NUMA + CPU + PCIeSwitch 节点及 HAS 关系
+        // --------------------------------------------------------------------------------
+        
+        for (let i = 0; i < numNuma; i++) {
             const numaId = `${computeNodeId}-numa${i}`;
             const cpuId = `${computeNodeId}-cpu${i}`;
-            const affinity = cpuAffinityRanges[i] || '';
+            const pciswId = `${computeNodeId}-pcisw${i}`; 
 
+            canonicalNumaIds.push(numaId);
+            canonicalCpuIds.push(cpuId);
+            canonicalPciswIds.push(pciswId);
+
+            const info = numaInfoMap.get(i)!;
+            
             // NUMA
             cmds.push(`
                 MERGE (n:NUMA {id:'${numaId}'})
-                ON CREATE SET n.name='NUMA${i}', n.parent='${computeNodeId}', n.depth=2
-                ON MATCH SET n.updatedAt=datetime()
+                ON CREATE SET n.name='NUMA${i}', n.parent='${computeNodeId}', n.depth=2, n.numa_key='${info.numaKey}'
+                ON MATCH SET n.updatedAt=datetime(), n.numa_key='${info.numaKey}'
             `);
 
             // CPU
             cmds.push(`
                 MERGE (cpu:CPU {id:'${cpuId}'})
                 ON CREATE SET cpu.name='CPU${i}', cpu.parent='${numaId}', cpu.depth=3,
-                    cpu.affinity_range='${affinity}', cpu.numa_affinity='${i}'
-                ON MATCH SET cpu.updatedAt=datetime()
+                    cpu.affinity_range='${info.affinity}', cpu.numa_affinity='${info.numaKey}'
+                ON MATCH SET cpu.updatedAt=datetime(), cpu.affinity_range='${info.affinity}'
             `);
 
-            // Relationship
+            // PCIeSwitch (作为 CPU 的直接连接点)
+            cmds.push(`
+                MERGE (s:PCIeSwitch {id:'${pciswId}'})
+                ON CREATE SET s.name='PCISW${i}', s.type='MPB', s.parent='${numaId}', s.depth=3
+                ON MATCH SET s.updatedAt=datetime()
+            `);
+
+            // Compute -> NUMA 关系
             cmds.push(`
                 MATCH (c:Compute {id:'${computeNodeId}'}), (n:NUMA {id:'${numaId}'})
                 MERGE (c)-[:HAS]->(n)
             `);
+
+            // NUMA -> CPU, NUMA -> PCIeSwitch 关系 (层级关系)
+            cmds.push(`
+                MATCH (n:NUMA {id:'${numaId}'}), (cpu:CPU {id:'${cpuId}'}), (s:PCIeSwitch {id:'${pciswId}'})
+                MERGE (n)-[:HAS_COMPONENT]->(cpu)
+                MERGE (n)-[:HAS_COMPONENT]->(s)
+            `);
+
+            // CPU -> PCIeSwitch 关系 (物理连接)
+            cmds.push(`
+                MATCH (cpu:CPU {id:'${cpuId}'}), (s:PCIeSwitch {id:'${pciswId}'})
+                MERGE (cpu)-[:CONNECTED_TO {type:'PCIE_BRIDGE'}]->(s)
+            `);
         }
 
-        // ================================================================================
-        // 3. QPI Bus
-        // ================================================================================
+        // --------------------------------------------------------------------------------
+        // 3. QPI Bus (CPU 互联总线)
+        // --------------------------------------------------------------------------------
         const qpiId = `${computeNodeId}-qpi`;
         cmds.push(`
             MERGE (b:Bus {id:'${qpiId}'})
             ON CREATE SET b.name='QPI', b.type='QPI', b.parent='${computeNodeId}', b.depth=2
             ON MATCH SET b.updatedAt=datetime()
         `);
+        
+        // CPU 之间通过 QPI 连接
+        canonicalCpuIds.forEach((cpuId, index) => {
+            // CPU -> QPI
+            cmds.push(`
+                MATCH (cpu:CPU {id:'${cpuId}'}), (q:Bus {id:'${qpiId}'})
+                MERGE (cpu)-[:CONNECTED_TO {type:'INTER_CPU'}]->(q)
+            `);
+            // QPI -> Next CPU (形成链式连接)
+            if (index < numNuma - 1) {
+                 const nextCpuId = canonicalCpuIds[index + 1];
+                 cmds.push(`
+                    MATCH (q:Bus {id:'${qpiId}'}), (nextCpu:CPU {id:'${nextCpuId}'})
+                    MERGE (q)-[:CONNECTED_TO {type:'INTER_CPU'}]->(nextCpu)
+                `);
+            }
+        });
 
-        // ================================================================================
-        // 4. PCIe Switches
-        // ================================================================================
-        const pcisw0Id = `${computeNodeId}-pcie0`;
-        const pcisw1Id = `${computeNodeId}-pcie1`;
-        const numa0Id = `${computeNodeId}-numa0`;
-
+        // --------------------------------------------------------------------------------
+        // 3B. MT2 Bus (GPU 互联总线) (新增)
+        // --------------------------------------------------------------------------------
         cmds.push(`
-            MERGE (s:PCIeSwitch {id:'${pcisw0Id}'})
-            ON CREATE SET s.name='PCISW0', s.type='MPB', s.parent='${numa0Id}', s.depth=3
-            ON MATCH SET s.updatedAt=datetime()
+            MERGE (b:Bus {id:'${mt2BusId}'})
+            ON CREATE SET b.name='MT2 Bus', b.type='MT2', b.parent='${computeNodeId}', b.depth=2
+            ON MATCH SET b.updatedAt=datetime()
         `);
 
-        cmds.push(`
-            MERGE (s:PCIeSwitch {id:'${pcisw1Id}'})
-            ON CREATE SET s.name='PCISW1', s.type='MPB', s.parent='${numa0Id}', s.depth=3
-            ON MATCH SET s.updatedAt=datetime()
-        `);
 
-        // ================================================================================
-        // 5. NICs
-        // ================================================================================
-        const nicMap = {
-            "mlx5_2": "numa0",
-            "mlx5_3": "numa0",
-            "mlx5_4": "numa1",
-            "mlx5_5": "numa1"
-        };
-
-        for (const [name, numa] of Object.entries(nicMap)) {
-            const nicId = `${computeNodeId}-${name}`;
-            const parent = `${computeNodeId}-${numa}`;
-
-            cmds.push(`
-                MERGE (n:NIC {id:'${nicId}'})
-                ON CREATE SET n.name='${name.toUpperCase()}', n.parent='${parent}', n.depth=3
-                ON MATCH SET n.updatedAt=datetime()
-            `);
-        }
-
-        // ================================================================================
-        // 6. GPUs
-        // ================================================================================
-        for (let i = 0; i < 8; i++) {
-            cmds.push(`
-                MERGE (g:GPU {id:'${computeNodeId}-gpu${i}'})
-                ON CREATE SET g.name='GPU${i}', g.parent='${numa0Id}', g.depth=3
-                ON MATCH SET g.updatedAt=datetime()
-            `);
-        }
-
-        // ================================================================================
-        // 7. CONNECTED_TO relationships
-        // ================================================================================
-        // 辅助函数：根据组件名称获取完整的 ID
-        const getComponentId = (name: string): string => {
-            // 假设：
-            // - CPU0/CPU1 对应 numa0/numa1
-            // - PCISW0/PCISW1
-            // - MLX5_X
-            // - QPI
-            // - GPUX
+        // --------------------------------------------------------------------------------
+        // 4A. 创建所有 GPU/NIC 节点及其与 NUMA/PCISW 的连接
+        // --------------------------------------------------------------------------------
+        
+        matrixData.forEach((d: any) => {
+            const deviceName = d.device; 
             
-            if (name.startsWith("CPU")) {
-                const index = name.slice(3); // '0' 或 '1'
-                return `${computeNodeId}-cpu${index}`;
+            let numaKey = (d.numa_affinity || 'unknown').toString();
+            
+            // 如果是 NIC，则使用推断的 numaKey
+            if (deviceName.startsWith("NIC") || deviceName.startsWith("mlx5")) {
+                 numaKey = deviceNumaMap.get(deviceName) || numaKey;
             }
-            if (name.startsWith("PCISW")) {
-                const index = name.slice(5); // '0' 或 '1'
-                return `${computeNodeId}-pcie${index}`;
-            }
-            if (name.startsWith("MLX5_")) {
-                const index = name.slice(5); // '2' 到 '5'
-                return `${computeNodeId}-mlx5_${index}`;
-            }
-            if (name === "QPI") {
-                return `${computeNodeId}-qpi`;
-            }
-            if (name.startsWith("GPU")) {
-                const index = name.slice(3); // '0' 到 '7'
-                return `${computeNodeId}-gpu${index}`;
-            }
-            // 如果有其他类型的节点，需要在这里补充
-            return ''; // 返回空字符串或抛出错误
-        };
 
-        const relationNames = [
-            ["CPU0","PCISW0"],["CPU0","PCISW1"],
-            ["CPU0","MLX5_2"],["CPU0","MLX5_3"],
-            ["CPU0","QPI"],["QPI","CPU1"],
-            ["CPU1","MLX5_4"],["CPU1","MLX5_5"],
-            ["MLX5_2","MLX5_3"],
-            ["MLX5_4","MLX5_5"], 
-            ["GPU0","PCISW0"],["GPU1","PCISW0"],["GPU2","PCISW0"],["GPU3","PCISW0"],
-            ["GPU4","PCISW1"],["GPU5","PCISW1"],["GPU6","PCISW1"],["GPU7","PCISW1"]
-        ];
+            const canonicalIndex = numaMap.get(numaKey);
+            
+            // 只有当设备名称存在且能找到归属的 NUMA 时才创建节点
+            if (!deviceName || canonicalIndex === undefined) {
+                 if (deviceName.startsWith("NIC") || deviceName.startsWith("mlx5")) {
+                     console.warn(`跳过 NIC ${deviceName}: 无法找到或推断其 NUMA 归属 (${numaKey})`);
+                 }
+                return; 
+            }
+            
+            const deviceId = getCanonicalDeviceId(deviceName);
+            const numaId = canonicalNumaIds[canonicalIndex];
+            const pciswId = canonicalPciswIds[canonicalIndex]; // 使用 PCISW ID
 
-        const relationPairs = relationNames.map(([aName, bName]) => [
-            getComponentId(aName), 
-            getComponentId(bName)
-        ]).filter(([idA, idB]) => idA && idB); // 过滤掉无效的 ID
+            let nodeLabel = '';
+            // 判断设备类型
+            if (deviceName.startsWith("GPU")) {
+                nodeLabel = 'GPU';
+            } else if (deviceName.startsWith("NIC") || deviceName.startsWith("mlx5")) {
+                nodeLabel = 'NIC';
+            } else {
+                return; // 跳过其他未建模的设备类型
+            }
 
-        for (const [aId, bId] of relationPairs) {
+            // A. 创建设备节点 (并关联到 NUMA 父节点)
             cmds.push(`
-                MATCH (x {id:'${aId}'}), (y {id:'${bId}'})
-                MERGE (x)-[:CONNECTED_TO]->(y)
-            `);
-        }
+                MATCH (n:NUMA {id:'${numaId}'})
+                MERGE (dev:${nodeLabel} {id:'${deviceId}'})
+                ON CREATE SET dev.name='${deviceName.toUpperCase()}', dev.parent='${numaId}', dev.depth=3, dev.numa_affinity='${numaKey}', dev.createdAt=datetime()
+                ON MATCH SET dev.updatedAt=datetime(), dev.numa_affinity='${numaKey}'
 
-        // ================================================================================
-        // 8. Execute (Neo4j 5.x: one statement per run)
-        // ================================================================================
+                MERGE (n)-[:HAS_COMPONENT]->(dev)
+            `);
+
+            // B. 创建关键连接 
+            if (nodeLabel === 'GPU') {
+                // 1. GPU 连接到本地 PCIe Switch (保持不变)
+                cmds.push(`
+                    MATCH (g:GPU {id:'${deviceId}'}), (s:PCIeSwitch {id:'${pciswId}'})
+                    MERGE (g)-[:CONNECTED_TO {type:'PCIE_SWITCH'}]->(s)
+                `);
+                
+                // 2. GPU 连接到 MT2 Bus (新增)
+                cmds.push(`
+                    MATCH (g:GPU {id:'${deviceId}'}), (b:Bus {id:'${mt2BusId}'})
+                    MERGE (g)-[:CONNECTED_TO {type:'MT2_LINK'}]->(b)
+                `);
+            } else if (nodeLabel === 'NIC') {
+                // NIC 连接到本地 PCIe Switch (修改: 从 CPU 改为 PCISW)
+                cmds.push(`
+                    MATCH (n:NIC {id:'${deviceId}'}), (s:PCIeSwitch {id:'${pciswId}'})
+                    MERGE (n)-[:CONNECTED_TO {type:'PCIE_SWITCH'}]->(s)
+                `);
+                
+                // *** 移除 NIC 之间 SPB 连接的创建，留给 4B 阶段处理 ***
+            }
+        });
+
+
+        // --------------------------------------------------------------------------------
+        // 4B. 创建 NIC 之间的 SPB 连接 (确保在节点 MERGE 之后执行)
+        // --------------------------------------------------------------------------------
+        
+        matrixData.forEach((d: any) => {
+            const deviceName = d.device; 
+
+            // 仅处理 NIC 设备
+            if (deviceName.startsWith("NIC") || deviceName.startsWith("mlx5")) {
+                const deviceId = getCanonicalDeviceId(deviceName);
+                const connections = d.connections || {};
+
+                for (const [otherDeviceName, connectionType] of Object.entries(connections)) {
+                    // 仅关注 SPB 连接，并且确保只连接到其他 NIC
+                    if (connectionType === 'SPB' && (otherDeviceName.startsWith("NIC") || otherDeviceName.startsWith("mlx5"))) {
+                        const otherDeviceId = getCanonicalDeviceId(otherDeviceName);
+
+                        // 避免重复创建和自连接 (deviceId < otherDeviceId)
+                        if (deviceId < otherDeviceId) {
+                            cmds.push(`
+                                MATCH (x:NIC {id:'${deviceId}'}), (y:NIC {id:'${otherDeviceId}'})
+                                MERGE (x)-[:CONNECTED_TO {type:'SPB_LINK'}]->(y)
+                            `);
+                        }
+                    }
+                }
+            }
+        });
+
+
+        // --------------------------------------------------------------------------------
+        // 5. Execute
+        // --------------------------------------------------------------------------------
         await session.writeTransaction(async tx => {
             for (const stmt of cmds) {
                 await tx.run(stmt);

@@ -11,3 +11,5 @@ export default driver;
 
 // 在线预览
 // http://localhost:7474/browser/preview/
+// MATCH (n) DETACH DELETE n;
+// MATCH p=()-[]->() RETURN p;
