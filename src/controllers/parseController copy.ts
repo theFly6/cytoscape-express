@@ -22,15 +22,17 @@ export const parseNode = async (req: Request, res: Response) => {
     try {
         const { ip, hostname } = req.query as { ip: string, hostname: string };
         const response = await axios.post(`http://${process.env.SERVER_URL_BASE}/info/node?ip=${ip}`);
+        
+        // 将response.data经过解析转存储到neo4j中
         let data
-        if (!hostname?.includes("node")) {
+        if(!hostname?.includes("node")){
             data = parseGPUTopology((response.data as any).topologyData);
             await saveNodeTopologyData(ip, hostname, data);
         }
         else {
             data = parseGPUTopology2((response.data as any).topologyData);
             await saveNodeTopologyData2(ip, hostname, data);
-        }
+        } 
         res.json(data);
     } catch (error) {
         res.status(500).json({ error: '解析错误' });
@@ -166,7 +168,7 @@ export const parseNode = async (req: Request, res: Response) => {
 //             // - MLX5_X
 //             // - QPI
 //             // - GPUX
-
+            
 //             if (name.startsWith("CPU")) {
 //                 const index = name.slice(3); // '0' 或 '1'
 //                 return `${computeNodeId}-cpu${index}`;
@@ -248,7 +250,7 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
         const matrixData = data.matrixData || [];
         const computeNodeId = ip;
         const cmds: string[] = [];
-
+        
         // --------------------------------------------------------------------------------
         // 0. 动态识别 NUMA/CPU 组 并 推断 NIC 归属
         // --------------------------------------------------------------------------------
@@ -256,7 +258,7 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
         const numaInfoMap = new Map<number, { affinity: string, numaKey: string }>(); // {index: {affinity, numaKey}}
         // 存储所有设备的 NUMA Key，用于 NIC 推断
         const deviceNumaMap = new Map<string, string>(); // {deviceName: numaKey}
-
+        
         // 第一次遍历：识别所有 GPU 定义的 NUMA 组，并存储 GPU 的归属
         matrixData.forEach((d: any) => {
             const numaKey = (d.numa_affinity || 'unknown').toString();
@@ -265,15 +267,15 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
                 if (!numaMap.has(numaKey)) {
                     const index = numaMap.size;
                     numaMap.set(numaKey, index);
-                    numaInfoMap.set(index, {
-                        affinity: d.cpu_affinity || '',
-                        numaKey: numaKey
+                    numaInfoMap.set(index, { 
+                        affinity: d.cpu_affinity || '', 
+                        numaKey: numaKey 
                     });
                 }
             }
             // 存储所有设备的归属（如果有 numa_affinity）
             if (numaKey !== 'SYS' && numaKey !== 'unknown' && numaKey.trim() !== '') {
-                deviceNumaMap.set(d.device, numaKey);
+                 deviceNumaMap.set(d.device, numaKey);
             }
         });
 
@@ -288,13 +290,13 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
                         if (inferredNumaKey) {
                             // 推断成功，将 NIC 归属到该 NUMA
                             deviceNumaMap.set(d.device, inferredNumaKey);
-                            break;
+                            break; 
                         }
                     }
                 }
             }
         });
-
+        
         const numNuma = numaMap.size;
         const canonicalNumaIds: string[] = [];
         const canonicalCpuIds: string[] = [];
@@ -312,22 +314,22 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
             ON CREATE SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.createdAt=datetime()
             ON MATCH SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.updatedAt=datetime()
         `);
-
+        
         // --------------------------------------------------------------------------------
         // 2. 动态创建 NUMA + CPU + PCIeSwitch 节点及 HAS 关系
         // --------------------------------------------------------------------------------
-
+        
         for (let i = 0; i < numNuma; i++) {
             const numaId = `${computeNodeId}-numa${i}`;
             const cpuId = `${computeNodeId}-cpu${i}`;
-            const pciswId = `${computeNodeId}-pcisw${i}`;
+            const pciswId = `${computeNodeId}-pcisw${i}`; 
 
             canonicalNumaIds.push(numaId);
             canonicalCpuIds.push(cpuId);
             canonicalPciswIds.push(pciswId);
 
             const info = numaInfoMap.get(i)!;
-
+            
             // NUMA
             cmds.push(`
                 MERGE (n:NUMA {id:'${numaId}'})
@@ -379,7 +381,7 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
             ON CREATE SET b.name='QPI', b.type='QPI', b.parent='${computeNodeId}', b.depth=2
             ON MATCH SET b.updatedAt=datetime()
         `);
-
+        
         // CPU 之间通过 QPI 连接
         canonicalCpuIds.forEach((cpuId, index) => {
             // CPU -> QPI
@@ -389,8 +391,8 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
             `);
             // QPI -> Next CPU (形成链式连接)
             if (index < numNuma - 1) {
-                const nextCpuId = canonicalCpuIds[index + 1];
-                cmds.push(`
+                 const nextCpuId = canonicalCpuIds[index + 1];
+                 cmds.push(`
                     MATCH (q:Bus {id:'${qpiId}'}), (nextCpu:CPU {id:'${nextCpuId}'})
                     MERGE (q)-[:CONNECTED_TO {type:'INTER_CPU'}]->(nextCpu)
                 `);
@@ -410,27 +412,27 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
         // --------------------------------------------------------------------------------
         // 4A. 创建所有 GPU/NIC 节点及其与 NUMA/PCISW 的连接
         // --------------------------------------------------------------------------------
-
+        
         matrixData.forEach((d: any) => {
-            const deviceName = d.device;
-
+            const deviceName = d.device; 
+            
             let numaKey = (d.numa_affinity || 'unknown').toString();
-
+            
             // 如果是 NIC，则使用推断的 numaKey
             if (deviceName.startsWith("NIC") || deviceName.startsWith("mlx5")) {
-                numaKey = deviceNumaMap.get(deviceName) || numaKey;
+                 numaKey = deviceNumaMap.get(deviceName) || numaKey;
             }
 
             const canonicalIndex = numaMap.get(numaKey);
-
+            
             // 只有当设备名称存在且能找到归属的 NUMA 时才创建节点
             if (!deviceName || canonicalIndex === undefined) {
-                if (deviceName.startsWith("NIC") || deviceName.startsWith("mlx5")) {
-                    console.warn(`跳过 NIC ${deviceName}: 无法找到或推断其 NUMA 归属 (${numaKey})`);
-                }
-                return;
+                 if (deviceName.startsWith("NIC") || deviceName.startsWith("mlx5")) {
+                     console.warn(`跳过 NIC ${deviceName}: 无法找到或推断其 NUMA 归属 (${numaKey})`);
+                 }
+                return; 
             }
-
+            
             const deviceId = getCanonicalDeviceId(deviceName);
             const numaId = canonicalNumaIds[canonicalIndex];
             const pciswId = canonicalPciswIds[canonicalIndex]; // 使用 PCISW ID
@@ -462,7 +464,7 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
                     MATCH (g:GPU {id:'${deviceId}'}), (s:PCIeSwitch {id:'${pciswId}'})
                     MERGE (g)-[:CONNECTED_TO {type:'PCIE_SWITCH'}]->(s)
                 `);
-
+                
                 // 2. GPU 连接到 MT2 Bus (新增)
                 cmds.push(`
                     MATCH (g:GPU {id:'${deviceId}'}), (b:Bus {id:'${mt2BusId}'})
@@ -474,7 +476,7 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
                     MATCH (n:NIC {id:'${deviceId}'}), (s:PCIeSwitch {id:'${pciswId}'})
                     MERGE (n)-[:CONNECTED_TO {type:'PCIE_SWITCH'}]->(s)
                 `);
-
+                
                 // *** 移除 NIC 之间 SPB 连接的创建，留给 4B 阶段处理 ***
             }
         });
@@ -483,9 +485,9 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
         // --------------------------------------------------------------------------------
         // 4B. 创建 NIC 之间的 SPB 连接 (确保在节点 MERGE 之后执行)
         // --------------------------------------------------------------------------------
-
+        
         matrixData.forEach((d: any) => {
-            const deviceName = d.device;
+            const deviceName = d.device; 
 
             // 仅处理 NIC 设备
             if (deviceName.startsWith("NIC") || deviceName.startsWith("mlx5")) {
@@ -528,7 +530,7 @@ export const saveNodeTopologyData = async (ip: string, hostname: string, data: a
 
 
 export const saveNodeTopologyData2 = async (ip: string, hostname: string, data: any) => {
-    console.log('即将准备 saveNodeTopologyData2 (包含完整的 Parent 属性)', 'ip: ', ip, 'hostname: ', hostname);
+    console.log('即将准备 saveNodeTopologyData2 (针对 NVLink/PXB 架构)', 'ip: ', ip, 'hostname: ', hostname);
 
     if (!driver) throw new Error("Neo4j driver not initialized.");
     const session = driver.session({ database: Neo4jDatabase });
@@ -537,143 +539,123 @@ export const saveNodeTopologyData2 = async (ip: string, hostname: string, data: 
         const matrixData = data.matrixData || [];
         const computeNodeId = ip;
         const cmds: string[] = [];
-
+        
         // --------------------------------------------------------------------------------
         // 0. 动态识别 NUMA/CPU 组
         // --------------------------------------------------------------------------------
-        const numaMap = new Map<string, number>();
-        const numaInfoMap = new Map<number, { affinity: string, numaKey: string }>();
-        const deviceNumaMap = new Map<string, string>();
-
+        const numaMap = new Map<string, number>(); 
+        const numaInfoMap = new Map<number, { affinity: string, numaKey: string }>(); 
+        const deviceNumaMap = new Map<string, string>(); 
+        
         matrixData.forEach((d: any) => {
             const numaKey = (d.numa_affinity || 'unknown').toString();
             if (numaKey !== 'SYS' && numaKey !== 'unknown' && numaKey.trim() !== '') {
                 if (!numaMap.has(numaKey)) {
                     const index = numaMap.size;
                     numaMap.set(numaKey, index);
-                    numaInfoMap.set(index, {
-                        affinity: d.cpu_affinity || '',
-                        numaKey: numaKey
+                    numaInfoMap.set(index, { 
+                        affinity: d.cpu_affinity || '', 
+                        numaKey: numaKey 
                     });
                 }
             }
             if (numaKey !== 'SYS' && numaKey !== 'unknown' && numaKey.trim() !== '') {
-                deviceNumaMap.set(d.device, numaKey);
+                 deviceNumaMap.set(d.device, numaKey);
             }
         });
 
-        // NIC NUMA 归属推断
+        // NIC NUMA 归属推断 (针对 PXB 类型)
         matrixData.forEach((d: any) => {
             if ((d.device.startsWith("NIC") || d.device.startsWith("mlx5")) && !d.numa_affinity) {
                 const connections = d.connections || {};
                 for (const [connectedDevice, connectionType] of Object.entries(connections)) {
-                    if (connectedDevice.startsWith("GPU") && (connectionType === 'PXB' || connectionType === 'PIX' || connectionType === 'NODE')) {
+                    // 在这种架构中，NIC 通过 PXB 连接到 GPU
+                    if (connectedDevice.startsWith("GPU") && (connectionType === 'PXB' || connectionType === 'PIX')) {
                         const inferredNumaKey = deviceNumaMap.get(connectedDevice);
                         if (inferredNumaKey) {
                             deviceNumaMap.set(d.device, inferredNumaKey);
-                            break;
+                            break; 
                         }
                     }
                 }
             }
         });
-
+        
         const numNuma = numaMap.size;
         const canonicalNumaIds: string[] = [];
         const canonicalCpuIds: string[] = [];
         const canonicalPciswIds: string[] = [];
-        const nvlinkBusId = `${computeNodeId}-nvlink-bus`;
+        const nvlinkBusId = `${computeNodeId}-nvlink-bus`; // NVLink 总线
 
         const getCanonicalDeviceId = (name: string): string => `${computeNodeId}-${name.toLowerCase()}`;
 
-        // 1. Compute node (根节点)
+        // 1. Compute node
         cmds.push(`
             MERGE (c:Compute {id:'${computeNodeId}'})
             ON CREATE SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.createdAt=datetime()
             ON MATCH SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.updatedAt=datetime()
         `);
-
-        // 2. 动态创建层级：NUMA -> (CPU, PXB)
+        
+        // 2. NUMA + CPU + PCIeSwitch
         for (let i = 0; i < numNuma; i++) {
             const numaId = `${computeNodeId}-numa${i}`;
             const cpuId = `${computeNodeId}-cpu${i}`;
-            const pciswId = `${computeNodeId}-pcisw${i}`;
+            const pciswId = `${computeNodeId}-pcisw${i}`; 
 
             canonicalNumaIds.push(numaId);
             canonicalCpuIds.push(cpuId);
             canonicalPciswIds.push(pciswId);
 
             const info = numaInfoMap.get(i)!;
-
-            // 创建逻辑层级节点，并设置 parent 属性
+            
             cmds.push(`
-                MATCH (c:Compute {id:'${computeNodeId}'})
-                
-                // 创建 NUMA
                 MERGE (n:NUMA {id:'${numaId}'})
                 ON CREATE SET n.name='NUMA${i}', n.parent='${computeNodeId}', n.depth=2, n.numa_key='${info.numaKey}'
-                
-                // 创建 CPU (属于 NUMA)
                 MERGE (cpu:CPU {id:'${cpuId}'})
-                ON CREATE SET cpu.name='CPU${i}', cpu.parent='${numaId}', cpu.depth=3, cpu.affinity_range='${info.affinity}', cpu.numa_affinity='${info.numaKey}'
-                
-                // 创建 PCIe Switch / PXB (属于 NUMA)
+                ON CREATE SET cpu.name='CPU${i}', cpu.parent='${numaId}', cpu.depth=3, cpu.affinity_range='${info.affinity}'
                 MERGE (s:PCIeSwitch {id:'${pciswId}'})
                 ON CREATE SET s.name='PXB${i}', s.type='PXB', s.parent='${numaId}', s.depth=3
                 
-                // 建立 HAS 关系链
+                WITH n, cpu, s
+                MATCH (c:Compute {id:'${computeNodeId}'})
                 MERGE (c)-[:HAS]->(n)
                 MERGE (n)-[:HAS_COMPONENT]->(cpu)
                 MERGE (n)-[:HAS_COMPONENT]->(s)
-                
-                // 建立 CPU 到 Switch 的物理连接
                 MERGE (cpu)-[:CONNECTED_TO {type:'PCIE_HOST_BRIDGE'}]->(s)
             `);
         }
 
-        // 3. NVLink Bus (属于 Compute Node)
+        // 3. NVLink Bus
         cmds.push(`
             MERGE (b:Bus {id:'${nvlinkBusId}'})
             ON CREATE SET b.name='NVLink Fabric', b.type='NVLINK', b.parent='${computeNodeId}', b.depth=2
         `);
 
-        // 4. GPU & NIC Nodes (设置 parent 为所属的 NUMA)
+        // 4. GPU & NIC Nodes
         matrixData.forEach((d: any) => {
-            const deviceName = d.device;
+            const deviceName = d.device; 
             let numaKey = (d.numa_affinity || 'unknown').toString();
             if (deviceName.startsWith("NIC") || deviceName.startsWith("mlx5")) {
-                numaKey = deviceNumaMap.get(deviceName) || numaKey;
+                 numaKey = deviceNumaMap.get(deviceName) || numaKey;
             }
 
             const canonicalIndex = numaMap.get(numaKey);
-            if (!deviceName || canonicalIndex === undefined) return;
-
+            if (!deviceName || canonicalIndex === undefined) return; 
+            
             const deviceId = getCanonicalDeviceId(deviceName);
-            const numaId = canonicalNumaIds[canonicalIndex];
             const pciswId = canonicalPciswIds[canonicalIndex];
             const isGPU = deviceName.startsWith("GPU");
 
             cmds.push(`
-                MATCH (n:NUMA {id:'${numaId}'}), (s:PCIeSwitch {id:'${pciswId}'})
-                
-                // 创建设备，显式设置 parent 属性
                 MERGE (dev:${isGPU ? 'GPU' : 'NIC'} {id:'${deviceId}'})
-                ON CREATE SET 
-                    dev.name='${deviceName.toUpperCase()}', 
-                    dev.parent='${numaId}', 
-                    dev.numa_affinity='${numaKey}', 
-                    dev.depth=4,
-                    dev.createdAt=datetime()
-                
-                // 逻辑归属关系
-                MERGE (n)-[:HAS_COMPONENT]->(dev)
-                
-                // 物理连接关系
+                ON CREATE SET dev.name='${deviceName.toUpperCase()}', dev.numa_affinity='${numaKey}', dev.depth=4
+                WITH dev
+                MATCH (s:PCIeSwitch {id:'${pciswId}'})
                 MERGE (dev)-[:CONNECTED_TO {type:'PCIE_LINK'}]->(s)
             `);
 
             if (isGPU) {
-                // GPU 额外连接到 NVLink Fabric
+                // GPU 连接到 NVLink Bus
                 cmds.push(`
                     MATCH (g:GPU {id:'${deviceId}'}), (b:Bus {id:'${nvlinkBusId}'})
                     MERGE (g)-[:CONNECTED_TO {type:'NVLINK'}]->(b)
@@ -681,14 +663,14 @@ export const saveNodeTopologyData2 = async (ip: string, hostname: string, data: 
             }
         });
 
-        // 5. 执行
+        // 5. 执行事务
         await session.writeTransaction(async tx => {
             for (const stmt of cmds) {
                 await tx.run(stmt);
             }
         });
 
-        console.log(`NVLink 拓扑写入完成 (带 Parent): ${hostname}`);
+        console.log(`NVLink 拓扑写入完成: ${hostname}`);
 
     } finally {
         await session.close();
@@ -701,7 +683,6 @@ export const saveNodeTopologyData2 = async (ip: string, hostname: string, data: 
  * @param text 原始拓扑矩阵文本。
  * @returns 包含解析后的矩阵数据和图例的元组：[matrix_data, legend_data]
  */
-
 export const parseGPUTopology = (text: string): { matrixData: any[], legendData: Record<string, string> } => {
     const lines = text.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
     if (lines.length === 0) {
@@ -778,7 +759,6 @@ export const parseGPUTopology = (text: string): { matrixData: any[], legendData:
     return { matrixData, legendData };
     // return [matrixData, legendData];
 };
-
 export const parseGPUTopology2 = (text: string): { matrixData: any[], legendData: Record<string, string> } => {
     // 预处理：统一换行符并过滤空行
     const lines = text.trim().split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
@@ -790,7 +770,7 @@ export const parseGPUTopology2 = (text: string): { matrixData: any[], legendData
         .replace(/CPU Affinity/g, "CPU_Affinity")
         .replace(/NUMA Affinity/g, "NUMA_Affinity")
         .replace(/GPU NUMA ID/g, "GPU_NUMA_ID");
-
+    
     const headers = headerLine.split(/\s+/).filter(h => h.length > 0);
 
     // 确定特殊的属性列索引
@@ -820,21 +800,21 @@ export const parseGPUTopology2 = (text: string): { matrixData: any[], legendData
             // 支持 "X = Self" 或 "X  = Self"
             const match = line.match(/^([A-Z0-9#]{1,5})\s*=\s*(.*)/);
             if (match) legendData[match[1].trim()] = match[2].trim();
-        }
+        } 
         else if (parsingNICLegend) {
             // 解析 "NIC0: mlx5_0"
             const match = line.match(/^(NIC\d+):\s*(.*)/);
             if (match) legendData[match[1]] = match[2];
-        }
+        } 
         else {
             // 解析矩阵数据行
             const parts = line.split(/\s+/).filter(p => p.length > 0);
             if (parts.length === 0 || !parts[0].match(/^(GPU|NIC|mlx)/i)) continue;
 
             const rowDevice = parts[0];
-            const rowInfo: any = {
+            const rowInfo: any = { 
                 device: rowDevice,
-                connections: {}
+                connections: {} 
             };
 
             // 填充矩阵连接信息 (从索引1开始)
