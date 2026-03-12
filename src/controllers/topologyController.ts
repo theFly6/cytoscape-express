@@ -1,70 +1,9 @@
 // controllers/topologyController.ts
 import { Request, Response } from 'express';
-import { mockNodeData, mockLinkData } from '../data/topology';
 
 import driver, { Neo4jDatabase } from '../config/neo4j';
 import { topologyCluster } from '../data/topology';
 
-// 根据 nodeID 查询拓扑信息
-export const getTopologyInfo = (req: Request, res: Response) => {
-
-  try {
-    const { nodeID } = req.params
-
-    if (!nodeID || typeof nodeID !== 'string') {
-      return res.status(400).json({
-        error: '无效的nodeID参数，必须为字符串类型'
-      })
-    }
-
-    // 生成节点和链路数据
-    const nodeInfo = mockNodeData(nodeID)
-    const linkInfo = mockLinkData(nodeID)
-
-    // 返回整合后的信息
-    res.json({
-      node: nodeInfo,
-      links: linkInfo,
-      timestamp: new Date().toISOString()
-    })
-  } catch (error) {
-    console.error('拓扑信息查询错误:', error)
-    res.status(500).json({
-      error: '查询拓扑信息时发生服务器错误'
-    })
-  }
-};
-
-
-// 从neo4j获取拓扑图数据
-export const getTopologyGraph = async (req: Request, res: Response) => {
-  const session = driver.session({ database: Neo4jDatabase });
-  try {
-    const result = await session.run(
-      'MATCH (n)-[r]->(m) RETURN n, r, m LIMIT 1000'
-    );
-    const nodeInfo: any[] = []
-    const linkInfo: any[] = []
-    result.records.map(record => {
-      nodeInfo.push({
-        name: record.get('n').properties.name || 'defaultName',
-        id: record.get('n').properties.id,
-        ...record.get('n')
-      })
-      console.log('record.get(\'r\')', record.get('r'));
-      linkInfo.push(record.get('r'))
-    });
-    const nodes = {
-      nodes: nodeInfo,
-      links: linkInfo
-    }
-    res.json(nodes);
-  } catch (error) {
-    res.status(500).json({ error: error });
-  } finally {
-    await session.close();
-  }
-};
 
 // 1. 定义【关键词（小写）→ 形状】映射表（支持模糊匹配id中的关键词）
 const shapeMap = {

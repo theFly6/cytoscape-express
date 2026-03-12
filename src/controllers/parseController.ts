@@ -23,13 +23,20 @@ export const parseNode = async (req: Request, res: Response) => {
         const { ip, hostname } = req.query as { ip: string, hostname: string };
         const response = await axios.post(`http://${process.env.SERVER_URL_BASE}/info/node?ip=${ip}`);
         let data
-        if (!hostname?.includes("node")) {
+        if (!hostname?.includes("node") && !hostname?.includes("mx")) {
             data = parseGPUTopology((response.data as any).topologyData);
             await saveNodeTopologyData(ip, hostname, data);
         }
-        else {
+        else if (hostname?.includes("node")) {
+            // Nvida GPU拓扑数据解析
             data = parseGPUTopology2((response.data as any).topologyData);
             await saveNodeTopologyData2(ip, hostname, data);
+        }
+        else if (hostname?.includes("mx")) {
+            // Mx GPU拓扑数据解析
+            console.log('正在解析 Mx GPU 拓扑数据...');
+            data = parseGPUTopology3((response.data as any).topologyData);
+            await saveNodeTopologyData3(ip, hostname, data);
         }
         res.json(data);
     } catch (error) {
@@ -860,4 +867,180 @@ export const parseGPUTopology2 = (text: string): { matrixData: any[], legendData
     }
 
     return { matrixData, legendData };
+};
+
+
+export const parseGPUTopology3 = (text: string): { matrixData: any[], legendData: Record<string, string> } => {
+    const lines = text.trim().split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+    if (lines.length === 0) return { matrixData: [], legendData: {} };
+
+    // 1. 规范化表头处理：将 Mx 的 Node Affinity 映射为统一的 NUMA 标识
+    let headerLine = lines[0]
+        .replace(/Node Affinity/g, "NUMA_Affinity")
+        .replace(/CPU Affinity/g, "CPU_Affinity");
+
+    const headers = headerLine.split(/\s+/).filter(h => h.length > 0);
+    const cpuIdx = headers.indexOf("CPU_Affinity");
+    const numaIdx = headers.indexOf("NUMA_Affinity");
+    const matrixColsCount = (numaIdx !== -1 && cpuIdx !== -1) ? Math.min(numaIdx, cpuIdx) : headers.length;
+
+    const matrixData: any[] = [];
+    const legendData: Record<string, string> = {};
+    let parsingLegend = false;
+
+    for (const line of lines.slice(1)) {
+        if (line.startsWith("Legend:")) {
+            parsingLegend = true;
+            continue;
+        }
+
+        if (parsingLegend) {
+            const match = line.match(/^([A-Z0-9#]{1,5})\s*=\s*(.*)/);
+            if (match) legendData[match[1].trim()] = match[2].trim();
+        } else {
+            const parts = line.split(/\s+/).filter(p => p.length > 0);
+            if (parts.length === 0 || !parts[0].match(/^(GPU|NIC|mlx)/i)) continue;
+
+            const rowDevice = parts[0];
+            const rowInfo: any = {
+                device: rowDevice,
+                connections: {}
+            };
+
+            // 填充矩阵连接信息
+            for (let i = 0; i < matrixColsCount; i++) {
+                const targetDevice = headers[i];
+                if (parts[i + 1]) {
+                    rowInfo.connections[targetDevice] = parts[i + 1];
+                }
+            }
+
+            // 获取 Affinity 信息 (Mx 的 Node Affinity 对应逻辑上的 NUMA)
+            if (numaIdx !== -1 && parts[numaIdx + 1]) {
+                rowInfo.numa_affinity = parts[numaIdx + 1];
+            }
+            if (cpuIdx !== -1 && parts[cpuIdx + 1]) {
+                rowInfo.cpu_affinity = parts[cpuIdx + 1];
+            }
+
+            matrixData.push(rowInfo);
+        }
+    }
+
+    return { matrixData, legendData };
+};
+
+export const saveNodeTopologyData3 = async (ip: string, hostname: string, data: any) => {
+    console.log('执行 Mx 拓扑解析存储 (仅保留 MarsLink 互联)', 'ip:', ip);
+
+    if (!driver) throw new Error("Neo4j driver not initialized.");
+    const session = driver.session({ database: Neo4jDatabase });
+
+    try {
+        const matrixData = data.matrixData || [];
+        const computeNodeId = ip;
+        const cmds: string[] = [];
+        
+        // 1. 提取 NUMA 组 (Node Affinity)
+        const numaMap = new Map<string, number>(); 
+        const numaInfoMap = new Map<number, { affinity: string, numaKey: string }>();
+
+        matrixData.forEach((d: any) => {
+            const numaKey = (d.numa_affinity || 'unknown').toString();
+            if (numaKey !== 'unknown' && !numaMap.has(numaKey)) {
+                const index = numaMap.size;
+                numaMap.set(numaKey, index);
+                numaInfoMap.set(index, {
+                    affinity: d.cpu_affinity || '',
+                    numaKey: numaKey
+                });
+            }
+        });
+
+        const marslinkBusId = `${computeNodeId}-marslink-bus`;
+        const getCanonicalDeviceId = (name: string): string => `${computeNodeId}-${name.toLowerCase()}`;
+
+        // 2. 创建根节点 Compute
+        cmds.push(`
+            MERGE (c:Compute {id:'${computeNodeId}'})
+            ON CREATE SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.vendor='Mx'
+        `);
+
+        // 3. 创建 MarsLink Fabric 总线 (这是跨 NUMA 通讯的唯一路径)
+        cmds.push(`
+            MATCH (c:Compute {id:'${computeNodeId}'})
+            MERGE (b:Bus {id:'${marslinkBusId}'})
+            ON CREATE SET b.name='MarsLink Fabric', b.type='MARSLINK', b.parent='${computeNodeId}', b.depth=2
+            MERGE (c)-[:HAS]->(b)
+        `);
+
+        // 4. 创建层级：NUMA -> (CPU, PCIeSwitch)
+        // 注意：这里取消了 CPU 之间的任何 CONNECTED_TO 关系
+        numaMap.forEach((index, numaKey) => {
+            const numaId = `${computeNodeId}-numa${index}`;
+            const cpuId = `${computeNodeId}-cpu${index}`;
+            const pciswId = `${computeNodeId}-pcisw${index}`;
+            const info = numaInfoMap.get(index)!;
+
+            cmds.push(`
+                MATCH (c:Compute {id:'${computeNodeId}'})
+                MERGE (n:NUMA {id:'${numaId}'})
+                ON CREATE SET n.name='NUMA_Node${numaKey}', n.parent='${computeNodeId}', n.depth=2, n.numa_key='${numaKey}'
+                
+                MERGE (cpu:CPU {id:'${cpuId}'})
+                ON CREATE SET cpu.name='CPU${index}', cpu.parent='${numaId}', cpu.depth=3, cpu.affinity_range='${info.affinity}'
+                
+                MERGE (s:PCIeSwitch {id:'${pciswId}'})
+                ON CREATE SET s.name='PCI_RC_${index}', s.type='MX_PCI_ROOT', s.parent='${numaId}', s.depth=3
+                
+                MERGE (c)-[:HAS]->(n)
+                MERGE (n)-[:HAS_COMPONENT]->(cpu)
+                MERGE (n)-[:HAS_COMPONENT]->(s)
+                
+                // 仅保留 CPU 到本地 PCI 控制器的连接，用于管理 GPU
+                MERGE (cpu)-[:CONNECTED_TO {type:'PCI_LOCAL_BUS'}]->(s)
+            `);
+        });
+
+        // 5. 挂载 GPU 并连接到 MarsLink
+        matrixData.forEach((d: any) => {
+            const deviceName = d.device;
+            if (!deviceName.startsWith("GPU")) return;
+
+            const numaKey = (d.numa_affinity || 'unknown').toString();
+            const index = numaMap.get(numaKey);
+            if (index === undefined) return;
+
+            const deviceId = getCanonicalDeviceId(deviceName);
+            const numaId = `${computeNodeId}-numa${index}`;
+            const pciswId = `${computeNodeId}-pcisw${index}`;
+
+            cmds.push(`
+                MATCH (n:NUMA {id:'${numaId}'}), (s:PCIeSwitch {id:'${pciswId}'}), (b:Bus {id:'${marslinkBusId}'})
+                MERGE (g:GPU {id:'${deviceId}'})
+                ON CREATE SET 
+                    g.name='${deviceName.toUpperCase()}', 
+                    g.parent='${numaId}', 
+                    g.depth=4, 
+                    g.vendor='Mx'
+                
+                // 1. 逻辑归属
+                MERGE (n)-[:HAS_COMPONENT]->(g)
+                // 2. 本地 PCI 连接 (用于同 NUMA 内通讯)
+                MERGE (g)-[:CONNECTED_TO {type:'PCI_LINK'}]->(s)
+                // 3. 全局 MarsLink 连接 (用于跨 GPU 高速通讯)
+                MERGE (g)-[:CONNECTED_TO {type:'MARSLINK'}]->(b)
+            `);
+        });
+
+        await session.writeTransaction(async tx => {
+            for (const stmt of cmds) {
+                await tx.run(stmt);
+            }
+        });
+
+        console.log(`Mx 拓扑更新成功 (无 CPU 间连线): ${hostname}`);
+    } finally {
+        await session.close();
+    }
 };
