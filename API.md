@@ -7,7 +7,9 @@
 - [拓扑相关接口](#拓扑相关接口)
   - [获取所有拓扑节点](#1-获取所有拓扑节点)
   - [获取节点拓扑信息](#2-获取节点拓扑信息)
-  - [获取Cytoscape支持的拓扑图数据](#3-获取cytoscape支持的拓扑图数据)
+  - [获取节点详细拓扑信息](#3-获取节点详细拓扑信息)
+  - [获取Cytoscape支持的拓扑图数据](#4-获取cytoscape支持的拓扑图数据)
+  
 
 ---
 
@@ -101,8 +103,24 @@ GET /topology/info/node?ip={ip}&hostname={hostname}
 
 ---
 
+### 3. 获取节点详细拓扑信息
+根据IP地址通过向资源端服务器访问接口`http://${process.env.SERVER_URL_BASE}/info/node/detail?ip=${ip}`获取指定节点的详细拓扑信息，并解析GPU拓扑数据。
 
-### 3. 获取Cytoscape支持的拓扑图数据
+**接口地址：**
+```
+GET /topology/info/node/detail?ip={ip}
+```
+
+**请求方式：**
+- GET
+- POST
+
+
+
+---
+
+
+### 4. 获取Cytoscape支持的拓扑图数据
 
 获取适合Cytoscape.js前端库使用的拓扑图数据格式。
 

@@ -40,8 +40,19 @@ export const parseNode = async (req: Request, res: Response) => {
         }
         res.json(data);
     } catch (error) {
-        res.status(500).json({ error: '解析错误' });
+        res.status(500).json({ error: `解析错误: ${error}` });
     }
+}
+
+export const parseNodeDetail = async (req: Request, res: Response) => {
+    try {
+        const { ip, hostname } = req.query as { ip: string, hostname: string };
+        const response = await axios.post(`http://${process.env.SERVER_URL_BASE}/info/node/detail?ip=${ip}`);
+        const data = response.data;
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: `解析错误: ${error}` });
+    }   
 }
 
 // 将拓扑感知结果存储到neo4j中(第一版仅支持学校的感知)
