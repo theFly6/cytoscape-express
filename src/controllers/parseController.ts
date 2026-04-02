@@ -17,11 +17,23 @@ export const parseNodes = async (req: Request, res: Response) => {
     }
 }
 
+// 更新拓扑节点
+export const updateNodes = async (req: Request, res: Response) => {
+    try {
+        const { nodes } = req.body;
+        console.log('nodes: ', nodes)
+        const response = await axios.post(`http://${process.env.SERVER_URL_BASE}/info/nodes/update`, { nodes });
+        res.json(response.data);
+    } catch (error) {
+        res.status(500).json({ error: '解析错误' });
+    }
+}
+
 // 拓扑字符串解析
 export const parseNode = async (req: Request, res: Response) => {
     try {
-        const { ip, hostname } = req.query as { ip: string, hostname: string };
-        const response = await axios.post(`http://${process.env.SERVER_URL_BASE}/info/node?ip=${ip}`);
+        const { ip, hostname, port } = req.query as { ip: string, hostname: string, port: string };
+        const response = await axios.post(`http://${process.env.SERVER_URL_BASE}/info/node?ip=${ip}&port=${port}`);
         let data
         if (!hostname?.includes("node") && !hostname?.includes("mx")) {
             data = parseGPUTopology((response.data as any).topologyData);
@@ -36,7 +48,7 @@ export const parseNode = async (req: Request, res: Response) => {
             // Mx GPU拓扑数据解析
             console.log('正在解析 Mx GPU 拓扑数据...');
             data = parseGPUTopology3((response.data as any).topologyData);
-            await saveNodeTopologyData3(ip, hostname, data);
+            await saveNodeTopologyData3(ip, hostname, data, port);
         }
         res.json(data);
     } catch (error) {
@@ -46,8 +58,8 @@ export const parseNode = async (req: Request, res: Response) => {
 
 export const parseNodeDetail = async (req: Request, res: Response) => {
     try {
-        const { ip, hostname } = req.query as { ip: string, hostname: string };
-        const response = await axios.post(`http://${process.env.SERVER_URL_BASE}/info/node/detail?ip=${ip}`);
+        const { ip, hostname, port } = req.query as { ip: string, hostname: string, port : string };
+        const response = await axios.post(`http://${process.env.SERVER_URL_BASE}/info/node/detail?ip=${ip}&port=${port}`);
         const data = response.data;
         res.json(data);
     } catch (error) {
@@ -941,7 +953,7 @@ export const parseGPUTopology3 = (text: string): { matrixData: any[], legendData
     return { matrixData, legendData };
 };
 
-export const saveNodeTopologyData3 = async (ip: string, hostname: string, data: any) => {
+export const saveNodeTopologyData3 = async (ip: string, hostname: string, data: any, port: string) => {
     console.log('执行 Mx 拓扑解析存储 (仅保留 MarsLink 互联)', 'ip:', ip);
 
     if (!driver) throw new Error("Neo4j driver not initialized.");
@@ -972,9 +984,11 @@ export const saveNodeTopologyData3 = async (ip: string, hostname: string, data: 
         const getCanonicalDeviceId = (name: string): string => `${computeNodeId}-${name.toLowerCase()}`;
 
         // 2. 创建根节点 Compute
+        console.log("设置 Compute 节点信息：", computeNodeId, hostname, ip)
         cmds.push(`
             MERGE (c:Compute {id:'${computeNodeId}'})
-            ON CREATE SET c.name='${hostname}', c.ip='${ip}', c.depth=1, c.vendor='Mx'
+            ON CREATE SET c.name='${hostname}', c.ip='${ip}', c.port='${port}', c.depth=1, c.vendor='Mx'
+            ON MATCH SET c.name='${hostname}', c.ip='${ip}', c.port='${port}'
         `);
 
         // 3. 创建 MarsLink Fabric 总线 (这是跨 NUMA 通讯的唯一路径)

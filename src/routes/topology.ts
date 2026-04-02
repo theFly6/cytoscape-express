@@ -2,12 +2,16 @@
 import express from 'express'
 import { getCytoscapeTopology } from '../controllers/topologyController';
 
-import { parseNode, parseNodes, parseNodeDetail } from '../controllers/parseController';
+import { parseNode, parseNodes, parseNodeDetail, updateNodes } from '../controllers/parseController';
 
 const router = express.Router()
 
 // 接口实现：获取所有拓扑节点
 router.all('/info/nodes', parseNodes)
+
+// 接口实现：更新拓扑节点
+router.all('/info/nodes/update', updateNodes)
+
 
 // 接口实现：获取节点的拓扑信息
 router.all('/info/node', parseNode)

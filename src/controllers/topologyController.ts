@@ -74,6 +74,8 @@ export const getCytoscapeTopology = async (req: Request, res: Response) => {
             // 根据 ID 设置 depth 和 parent
             if (data.depth !== 1) {
               data.parent = node.properties.parent;
+            } else {
+              data.port = node.properties.port;
             }
 
             nodeMap.set(id, {
